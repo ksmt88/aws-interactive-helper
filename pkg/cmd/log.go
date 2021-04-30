@@ -16,7 +16,6 @@ import (
 type LogOptions struct {
     RootOptions
     LogGroupNamePrefix string
-    Filter             string
 }
 
 func init() {
@@ -29,7 +28,7 @@ func init() {
         Run: func(cmd *cobra.Command, args []string) {
             ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
             defer stop()
-            ctx, cancel := context.WithTimeout(ctx, time.Second*5)
+            ctx, cancel := context.WithTimeout(ctx, time.Second*10)
             defer cancel()
 
             region, err := rootCmd.Flags().GetString("region")
@@ -57,7 +56,7 @@ func init() {
 
             logGroupsInput := cloudwatchlogs.DescribeLogGroupsInput{
                 Limit:              nil,
-                LogGroupNamePrefix: nil,
+                LogGroupNamePrefix: &opts.LogGroupNamePrefix,
             }
             logGroupsOutput, err := client.DescribeLogGroups(ctx, &logGroupsInput)
             if err != nil {
@@ -90,11 +89,12 @@ func init() {
                 return
             }
 
+            startTime := time.Now().Add(- (24 * time.Hour * 3)).Unix() * 1000 // - 3 days
             filterLogEventsInput := cloudwatchlogs.FilterLogEventsInput{
                 // EndTime:    nil,
                 FilterPattern: &filter,
                 LogGroupName:  &logGroup,
-                // StartTime:  nil,
+                StartTime:     &startTime,
             }
             filterLogEventsOutput, err := client.FilterLogEvents(ctx, &filterLogEventsInput)
             if err != nil {
@@ -102,6 +102,7 @@ func init() {
             }
 
             for _, event := range filterLogEventsOutput.Events {
+                fmt.Printf("[%s] %s", time.Unix(*event.Timestamp/1000, 0), *event.Message)
                 fmt.Println(*event.Message, *event.Timestamp)
             }
         },
@@ -110,5 +111,4 @@ func init() {
     rootCmd.AddCommand(logCmd)
 
     logCmd.Flags().StringVar(&opts.LogGroupNamePrefix, "prefix", "", "log group name prefix")
-    logCmd.Flags().StringVar(&opts.Filter, "filter", "", "search text")
 }
